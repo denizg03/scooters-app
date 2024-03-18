@@ -1,0 +1,49 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - staging
+      - production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        
+      - name: Set up kubectl
+        uses: azure/k8s-set-context@v1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      
+      - name: Build and deploy application
+        env:
+          REGION: 'us-east1'
+          CLUSTER: 'scooter-app-p'
+          NAMESPACE: ${{ secrets.BLUEGREEN_NAMESPACE }}
+        run: |
+          # Bouw de Docker-image
+          docker build -t myapp .
+
+          # Push de Docker-image naar een container registry (bijv. Docker Hub)
+          docker push myusername/myapp:latest
+
+          # Implementeer de applicatie naar de Kubernetes-cluster
+          kubectl apply -f deployment.yaml
+
+          # Wacht enkele seconden om de implementatie te voltooien
+          sleep 10
+
+          # Maak een HTTP-request naar de geïmplementeerde applicatie en controleer de HTTP-statuscode
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://<ingress-url>/health)
+          
+          if [ $response -eq 200 ]; then
+            echo "De implementatie is geslaagd! HTTP-statuscode: $response"
+          else
+            echo "Er is een probleem opgetreden tijdens de implementatie. HTTP-statuscode: $response"
+            exit 1
+          fi
